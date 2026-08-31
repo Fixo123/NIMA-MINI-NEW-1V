@@ -91,31 +91,6 @@ async function initMongo() {
     }
     return db;
 }
-
-// List Message Generator
-function generateListMessage(text, buttonTitle, sections) {
-    return {
-        text: text,
-        footer: config.BOT_FOOTER,
-        title: buttonTitle,
-        buttonText: "Select",
-        sections: sections
-    };
-}
-//=======================================
-function generateButtonMessage(content, buttons, image = null) {
-    const message = {
-        text: content,
-        footer: config.BOT_FOOTER,
-        buttons: buttons,
-        headerType: 1
-    };
-    if (image) {
-        message.headerType = 4;
-        message.image = typeof image === 'string' ? { url: image } : image;
-    }
-    return message;
-}
 //=======================================
 const activeSockets = new Map();
 const socketCreationTime = new Map();
@@ -308,16 +283,6 @@ async function setupStatusHandlers(socket) {
     });
 }
 
-async function resize(image, width, height) {
-    let oyy = await Jimp.read(image);
-    let kiyomasa = await oyy.resize(width, height).getBufferAsync(Jimp.MIME_JPEG);
-    return kiyomasa;
-}
-
-function capital(string) {
-    return string.charAt(0).toUpperCase() + string.slice(1);
-}
-
 const createSerial = (size) => {
     return crypto.randomBytes(size).toString('hex').slice(0, size);
 }
@@ -373,7 +338,7 @@ async function handleMessageRevocation(socket, number) {
     });
 }
 
-// Setup command handlers with buttons and images
+// Setup command handlers without buttons
 function setupCommandHandlers(socket, number) {
     socket.ev.on('messages.upsert', async ({ messages }) => {
         const msg = messages[0];
@@ -387,13 +352,6 @@ function setupCommandHandlers(socket, number) {
             const text = (msg.message.conversation || msg.message.extendedTextMessage.text || '').trim();
             if (text.startsWith(config.PREFIX)) {
                 const parts = text.slice(config.PREFIX.length).trim().split(/\s+/);
-                command = parts[0].toLowerCase();
-                args = parts.slice(1);
-            }
-        } else if (msg.message.buttonsResponseMessage) {
-            const buttonId = msg.message.buttonsResponseMessage.selectedButtonId;
-            if (buttonId && buttonId.startsWith(config.PREFIX)) {
-                const parts = buttonId.slice(config.PREFIX.length).trim().split(/\s+/);
                 command = parts[0].toLowerCase();
                 args = parts.slice(1);
             }
@@ -415,18 +373,14 @@ function setupCommandHandlers(socket, number) {
                                    `*ʙᴏᴛ ᴏᴡɴᴇʀ :- ʟᴏᴋᴜ ɴɪᴍᴀ*\n` +
                                    `*ᴏᴡᴇɴʀ ɴᴜᴍʙᴇʀ :- 94760743488*\n` +
                                    `*ᴅɪᴘʟᴏʏ ᴍɪɴɪ ꜱɪᴛᴇ 👇*\n` +
-                                   `> https://nima-family-bot-web.vercel.app/`;
+                                   `> https://nima-family-bot-web.vercel.app/\n\n` +
+                                   `Type *.menu* to view command list.`;
                     const footer = config.BOT_FOOTER;
 
                     await socket.sendMessage(sender, {
                         image: { url: config.BUTTON_IMAGES.ALIVE },
-                        caption: formatMessage(title, content, footer),
-                        buttons: [
-                            { buttonId: `${config.PREFIX}menu`, buttonText: { displayText: 'MENU' }, type: 1 },
-                            { buttonId: `${config.PREFIX}ping`, buttonText: { displayText: 'PING' }, type: 1 }
-                        ],
-                        quoted: msg
-                    });
+                        caption: formatMessage(title, content, footer)
+                    }, { quoted: msg });
                     break;   
                  }
                  case 'seaart': {
@@ -489,7 +443,7 @@ function setupCommandHandlers(socket, number) {
 │
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-      [ 🔑 USE BUTTONS TO NAVIGATE ]
+      *Type .amenu for Full Commands List*
       *© NIMA FAMILY FREE BOT*
 `;
 
@@ -497,16 +451,8 @@ function setupCommandHandlers(socket, number) {
 
                     await socket.sendMessage(sender, {
                         image: { url: config.BUTTON_IMAGES.MENU }, 
-                        caption: menuCaption, 
-                        buttons: [
-                            { buttonId: `${config.PREFIX}amenu`, buttonText: { displayText: 'FULL COMMANDS LIST 🧩' }, type: 1 },
-                            { buttonId: `${config.PREFIX}ping`, buttonText: { displayText: 'CHECK LATENCY (PING) ⚡' }, type: 1 },
-                            { buttonId: `${config.PREFIX}system`, buttonText: { displayText: 'VIEW SYSTEM DATA ⚙️' }, type: 1 },
-                            { buttonId: `${config.PREFIX}alive`, buttonText: { displayText: 'VERIFY STATUS 🟢' }, type: 1 },
-                            { buttonId: `${config.PREFIX}owner`, buttonText: { displayText: 'CONTACT OPERATOR 👑' }, type: 1 }
-                        ],
-                        quoted: msg
-                    });
+                        caption: menuCaption
+                    }, { quoted: msg });
                     break;
                 }
                 case 'දාපන්':
@@ -687,7 +633,7 @@ function setupCommandHandlers(socket, number) {
                                 showAdAttribution: false
                             }
                         }
-                    });
+                    }, { quoted: msg });
                     break;
                 }
                 case 'play': {
@@ -726,7 +672,7 @@ function setupCommandHandlers(socket, number) {
                 }
                 case 'ping': {
                     var inital = new Date().getTime();
-                    let ping = await socket.sendMessage(sender, { text: '*_Pinging to Module..._* ❗' });
+                    let ping = await socket.sendMessage(sender, { text: '*_Pinging to Module..._* ❗' }, { quoted: msg });
                     var final = new Date().getTime();
                     await socket.sendMessage(sender, { text: '《 █▒▒▒▒▒▒▒▒▒▒▒》10%', edit: ping.key });
                     await socket.sendMessage(sender, { text: '《 ████▒▒▒▒▒▒▒▒》30%', edit: ping.key });
@@ -831,7 +777,7 @@ function setupCommandHandlers(socket, number) {
                     await socket.sendMessage(sender, {
                         image: { url: `https://files.catbox.moe/xlqa3o.jpg` },
                         caption: formatMessage(title, content, footer)
-                    });
+                    }, { quoted: msg });
                     break;
                 }
                 case 'song': {
