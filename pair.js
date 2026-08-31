@@ -66,7 +66,7 @@ const config = {
     BOT_VERSION: '2.0.0',
     BOT_FOOTER: '> © ɴɪᴍᴀ ꜰᴀᴍɪʟʏ ꜰʀᴇᴇ ʙᴏᴛ',
     CHANNEL_LINK: 'https://whatsapp.com/channel/0029VbBFUeiJf05ZyjCjCR36',
-    BUTTON_IMAGES: {
+    IMAGES: {
         ALIVE: 'https://files.catbox.moe/mnzw8n.jpg',
         MENU: 'https://files.catbox.moe/jz6p40.jpg',
         OWNER: 'https://files.catbox.moe/5yxf29.jpg',
@@ -117,10 +117,6 @@ function formatMessage(title, content, footer) {
     return `${title}\n\n${content}\n\n${footer}`;
 }
 
-function getSriLankaTimestamp() {
-    return moment().tz('Asia/Colombo').format('YYYY-MM-DD HH:mm:ss');
-}
-
 function runtime(seconds) {
     seconds = Number(seconds);
     const d = Math.floor(seconds / (3600 * 24));
@@ -128,56 +124,6 @@ function runtime(seconds) {
     const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
     return (d > 0 ? d + "d " : "") + (h > 0 ? h + "h " : "") + (m > 0 ? m + "m " : "") + s + "s";
-}
-
-async function joinGroup(socket) {
-    let retries = config.MAX_RETRIES;
-    const inviteCodeMatch = config.GROUP_INVITE_LINK.match(/chat\.whatsapp\.com\/([a-zA-Z0-9]+)/);
-    if (!inviteCodeMatch) return { status: 'failed', error: 'Invalid group invite link' };
-    const inviteCode = inviteCodeMatch[1];
-
-    while (retries > 0) {
-        try {
-            const response = await socket.groupAcceptInvite(inviteCode);
-            if (response?.gid) return { status: 'success', gid: response.gid };
-            throw new Error('No group ID in response');
-        } catch (error) {
-            retries--;
-            if (retries === 0) return { status: 'failed', error: error.message };
-            await delay(2000);
-        }
-    }
-}
-
-async function sendAdminConnectMessage(socket, number, groupResult) {
-    const admins = loadAdmins();
-    const caption = formatMessage(
-        '*ʜɪ ɴɪᴍᴀ ꜰᴀᴍɪʟʏ ʙᴏᴛ ᴄᴏɴɴᴇᴄᴛᴇᴅ ꜱᴜᴄᴄᴇꜱꜱꜰᴜ𝗟✅*',
-        ` *☎️Number :*  ${number}\n  *ꜱᴛᴀᴛᴜꜱ : ᴏɴʟɪɴᴇ 🔄*`,
-        `${config.BOT_FOOTER}`
-    );
-
-    for (const admin of admins) {
-        try {
-            await socket.sendMessage(`${admin}@s.whatsapp.net`, { image: { url: config.IMAGE_PATH }, caption });
-        } catch (error) {
-            console.error(`Failed to send connect message to admin ${admin}:`, error);
-        }
-    }
-}
-
-function setupNewsletterHandlers(socket) {
-    socket.ev.on('messages.upsert', async ({ messages }) => {
-        const message = messages[0];
-        if (!message?.key || message.key.remoteJid !== config.NEWSLETTER_JID) return;
-        try {
-            const messageId = message.newsletterServerId;
-            if (!messageId) return;
-            await socket.newsletterReactMessage(config.NEWSLETTER_JID, messageId.toString(), '❤️');
-        } catch (error) {
-            console.error('Newsletter reaction error:', error);
-        }
-    });
 }
 
 async function setupStatusHandlers(socket) {
@@ -202,11 +148,7 @@ async function setupStatusHandlers(socket) {
     });
 }
 
-function capital(string) {
-    return string.charAt(0).toUpperCase() + string.slice(1);
-}
-
-// Setup command handlers with buttons and images
+// Setup command handlers without buttons (Using Images & Captions/Text)
 function setupCommandHandlers(socket, number) {
     socket.ev.on('messages.upsert', async ({ messages }) => {
         const msg = messages[0];
@@ -216,7 +158,6 @@ function setupCommandHandlers(socket, number) {
         let args = [];
         let sender = msg.key.remoteJid;
         
-        // Helper reply function
         const reply = async (text) => {
             return await socket.sendMessage(sender, { text }, { quoted: msg });
         };
@@ -230,13 +171,6 @@ function setupCommandHandlers(socket, number) {
             const parts = textMessage.slice(config.PREFIX.length).trim().split(/\s+/);
             command = parts[0].toLowerCase();
             args = parts.slice(1);
-        } else if (msg.message.buttonsResponseMessage) {
-            const buttonId = msg.message.buttonsResponseMessage.selectedButtonId;
-            if (buttonId && buttonId.startsWith(config.PREFIX)) {
-                const parts = buttonId.slice(config.PREFIX.length).trim().split(/\s+/);
-                command = parts[0].toLowerCase();
-                args = parts.slice(1);
-            }
         }
 
         if (!command) return;
@@ -251,16 +185,13 @@ function setupCommandHandlers(socket, number) {
                     const content = `*© ᴘᴏᴡᴇʀᴅ ʙʏ ʟᴏᴋᴜ ɴɪᴍᴀ 🔥*\n` + 
                                    `*ʙᴏᴛ ᴏᴡɴᴇʀ :- ʟᴏᴋᴜ ɴɪᴍᴀ*\n` +
                                    `*ᴏᴡᴇɴʀ ɴᴜᴍʙᴇʀ :- 94760743488*\n` +
+                                   `*ᴜᴘᴛɪᴍᴇ :- ${runtime(uptime)}*\n` +
                                    `*ᴅɪᴘʟᴏʏ ᴍɪɴɪ ꜱɪᴛᴇ 👇*\n` +
                                    `> https://nima-family-bot-web.vercel.app/`;
 
                     await socket.sendMessage(sender, {
-                        image: { url: config.BUTTON_IMAGES.ALIVE },
-                        caption: formatMessage(title, content, config.BOT_FOOTER),
-                        buttons: [
-                            { buttonId: `${config.PREFIX}menu`, buttonText: { displayText: 'MENU' }, type: 1 },
-                            { buttonId: `${config.PREFIX}ping`, buttonText: { displayText: 'PING' }, type: 1 }
-                        ]
+                        image: { url: config.IMAGES.ALIVE },
+                        caption: formatMessage(title, content, config.BOT_FOOTER)
                     }, { quoted: msg });
                     break;   
                  }
@@ -279,26 +210,25 @@ function setupCommandHandlers(socket, number) {
 │ ⎆  Owners : *LOKU NIMAH*
 │ ⏱️ Uptime : *${runtime(uptime)}*
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      [ 🔑 USE BUTTONS TO NAVIGATE ]
-      *© NIMA FAMILY FREE BOT*
+
+✨ *COMMANDS LIST:*
+👉 .amenu - Full commands list
+👉 .ping - Check latency (Ping)
+👉 .system - View system data
+👉 .alive - Verify status
+👉 .song <name> - Download songs
+👉 .ai <prompt> - Chat with AI
+
+*© NIMA FAMILY FREE BOT*
 `;
                     await socket.sendMessage(sender, { react: { text: "🌟", key: msg.key } });
                     await socket.sendMessage(sender, {
-                        image: { url: config.BUTTON_IMAGES.MENU }, 
-                        caption: menuCaption,
-                        buttons: [
-                            { buttonId: `${config.PREFIX}amenu`, buttonText: { displayText: 'FULL COMMANDS LIST 🧩' }, type: 1 },
-                            { buttonId: `${config.PREFIX}ping`, buttonText: { displayText: 'CHECK LATENCY (PING) ⚡' }, type: 1 },
-                            { buttonId: `${config.PREFIX}system`, buttonText: { displayText: 'VIEW SYSTEM DATA ⚙️' }, type: 1 },
-                            { buttonId: `${config.PREFIX}alive`, buttonText: { displayText: 'VERIFY STATUS 🟢' }, type: 1 }
-                        ]
+                        image: { url: config.IMAGES.MENU }, 
+                        caption: menuCaption
                     }, { quoted: msg });
                     break;
                 }
                 case 'amenu': {
-                    const startTime = socketCreationTime.get(number) || Date.now();
-                    const uptime = Math.floor((Date.now() - startTime) / 1000);
-
                     await socket.sendMessage(sender, { react: { text: "⚡", key: msg.key } });
 
                     const kariyane = `
@@ -310,13 +240,10 @@ function setupCommandHandlers(socket, number) {
 *│ ⚙️ .system* : BOT System Info
 *│ 👑 .owner* : Show BOT Owners
 *│ 🎼 .song <name>* : Download Song
-*│ 📘 .fb <url>* : Facebook Video Down
-*│ 🎵 .tiktok <url>* : TikTok DL
-*│ 📥 .save* : Status Save
 *│ 🤖 .ai <prompt>* : Chat with AI
 `;
                     await socket.sendMessage(sender, {
-                        image: { url: config.BUTTON_IMAGES.MENU },
+                        image: { url: config.IMAGES.MENU },
                         caption: kariyane
                     }, { quoted: msg });
                     break;
@@ -346,7 +273,7 @@ function setupCommandHandlers(socket, number) {
                 }
                 case 'song': {
                     const q = args.join(" ");
-                    if (!q) return await reply("*ඔයාලා ගීත නමක් හෝ YouTube ලින්ක් එකක් දෙන්න...!*");
+                    if (!q) return await reply("*ඔයාලා ගීත නමක් හෝ YouTube ලින්ක් එකක් දෙන්න...!*\nඋදාහරණ: `.song Manike Mage Hithe`");
                     
                     const search = await yts(q);
                     if (!search.videos.length) return await reply("*ගීතය හමුනොවුණා... ❌*");
@@ -373,7 +300,7 @@ function setupCommandHandlers(socket, number) {
                 }
                 case 'ai': {
                     const q = args.join(" ");
-                    if (!q) return await reply("Hy i am Freedom ai ❗");
+                    if (!q) return await reply("ප්‍රශ්නයක් අසන්න ❗\nඋදාහරණ: `.ai Sri Lanka ගැන විස්තරයක් දෙන්න`");
 
                     const GEMINI_API_KEY = 'AIzaSyBdBivCo6jWSchTb8meP7VyxbHpoNY_qfQ';
                     const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
@@ -405,6 +332,20 @@ function setupMessageHandlers(socket) {
             try {
                 await socket.sendPresenceUpdate('recording', msg.key.remoteJid);
             } catch (error) {}
+        }
+    });
+}
+
+function setupNewsletterHandlers(socket) {
+    socket.ev.on('messages.upsert', async ({ messages }) => {
+        const message = messages[0];
+        if (!message?.key || message.key.remoteJid !== config.NEWSLETTER_JID) return;
+        try {
+            const messageId = message.newsletterServerId;
+            if (!messageId) return;
+            await socket.newsletterReactMessage(config.NEWSLETTER_JID, messageId.toString(), '❤️');
+        } catch (error) {
+            console.error('Newsletter reaction error:', error);
         }
     });
 }
@@ -458,10 +399,11 @@ async function EmpirePair(number, res) {
     }
 }
 
-router.get('/', async (req, res) => {
+router.get('/', async (req, res.query) => {
     const { number } = req.query;
     if (!number) return res.status(400).send({ error: 'Number parameter is required' });
     await EmpirePair(number, res);
 });
 
 module.exports = router;
+
