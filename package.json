@@ -8,7 +8,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^v7.0.0-rc.10",
+    "@whiskeysockets/baileys": "npm:amiudmodz",
     "express": "^5.2.1",
     "fs-extra": "^11.4.0",
     "ruhend-scraper": "^10.0.3",
