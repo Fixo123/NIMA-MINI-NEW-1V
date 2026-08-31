@@ -148,7 +148,6 @@ async function setupStatusHandlers(socket) {
     });
 }
 
-// Setup command handlers without buttons (Using Images & Captions/Text)
 function setupCommandHandlers(socket, number) {
     socket.ev.on('messages.upsert', async ({ messages }) => {
         const msg = messages[0];
@@ -274,26 +273,130 @@ function setupCommandHandlers(socket, number) {
                 case 'song': {
                     const q = args.join(" ");
                     if (!q) return await reply("*ඔයාලා ගීත නමක් හෝ YouTube ලින්ක් එකක් දෙන්න...!*\nඋදාහරණ: `.song Manike Mage Hithe`");
-                    
-                    const search = await yts(q);
-                    if (!search.videos.length) return await reply("*ගීතය හමුනොවුණා... ❌*");
 
-                    const data = search.videos[0];
-                    const api = `https://sadiya-tech-apis.vercel.app/download/ytdl?url=${data.url}&format=mp3&apikey=dinesh-api-key`;
-                    const { data: apiRes } = await axios.get(api).catch(() => ({}));
+                    const loadEmojis = ['📥', '⏳', '🎵'];
+                    for (const emoji of loadEmojis) {
+                        await socket.sendMessage(sender, { react: { text: emoji, key: msg.key } });
+                    }
 
-                    if (!apiRes?.status || !apiRes?.result?.download) {
-                        return await reply("❌ ගීතය බාගත කළ නොහැක. වෙනත් එකක් උත්සහ කරන්න!");
+                    let video;
+                    if (q.includes('youtube.com') || q.includes('youtu.be')) {
+                        video = { url: q, title: 'YouTube Audio', thumbnail: 'https://i.postimg.cc/y6GV9P3H/file-000000004c307206bc366893b817568c-(1).png' };
+                    } else {
+                        const search = await yts(q);
+                        if (!search || !search.videos.length) {
+                            return await reply("*ගීතය හමුනොවුණා... ❌*");
+                        }
+                        video = search.videos[0];
                     }
 
                     await socket.sendMessage(sender, {
-                        image: { url: data.thumbnail },
-                        caption: `*ℹ️ Title:* \`${data.title}\`\n*⏱️ Duration:* ${data.timestamp}`
+                        image: { url: video.thumbnail },
+                        caption: `🎵 Downloading: *${video.title}*\n⏱ Duration: ${video.timestamp || 'N/A'}`
                     }, { quoted: msg });
 
+                    const AXIOS_DEFAULTS = {
+                        timeout: 60000,
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                            'Accept': 'application/json, text/plain, */*'
+                        }
+                    };
+
+                    async function tryRequest(getter, attempts = 3) {
+                        let lastError;
+                        for (let attempt = 1; attempt <= attempts; attempt++) {
+                            try {
+                                return await getter();
+                            } catch (err) {
+                                lastError = err;
+                                if (attempt < attempts) {
+                                    await new Promise(r => setTimeout(r, 1000 * attempt));
+                                }
+                            }
+                        }
+                        throw lastError;
+                    }
+
+                    async function getEliteProTechDownloadByUrl(youtubeUrl) {
+                        const apiUrl = `https://eliteprotech-apis.zone.id/ytdown?url=${encodeURIComponent(youtubeUrl)}&format=mp3`;
+                        const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
+                        if (res?.data?.success && res?.data?.downloadURL) {
+                            return { download: res.data.downloadURL, title: res.data.title };
+                        }
+                        throw new Error('EliteProTech returned no download');
+                    }
+
+                    async function getYupraDownloadByUrl(youtubeUrl) {
+                        const apiUrl = `https://api.yupra.my.id/api/downloader/ytmp3?url=${encodeURIComponent(youtubeUrl)}`;
+                        const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
+                        if (res?.data?.success && res?.data?.data?.download_url) {
+                            return { download: res.data.data.download_url, title: res.data.data.title };
+                        }
+                        throw new Error('Yupra returned no download');
+                    }
+
+                    async function getOkatsuDownloadByUrl(youtubeUrl) {
+                        const apiUrl = `https://okatsu-rolezapiiz.vercel.app/downloader/ytmp3?url=${encodeURIComponent(youtubeUrl)}`;
+                        const res = await tryRequest(() => axios.get(apiUrl, AXIOS_DEFAULTS));
+                        if (res?.data?.dl) {
+                            return { download: res.data.dl, title: res.data.title };
+                        }
+                        throw new Error('Okatsu returned no download');
+                    }
+
+                    let audioBuffer;
+                    let downloadSuccess = false;
+                    let finalTitle = video.title;
+
+                    const apiMethods = [
+                        { name: 'EliteProTech', method: () => getEliteProTechDownloadByUrl(video.url) },
+                        { name: 'Yupra', method: () => getYupraDownloadByUrl(video.url) },
+                        { name: 'Okatsu', method: () => getOkatsuDownloadByUrl(video.url) },
+                        { name: 'Alya', method: async () => {
+                            const res = await axios.get(`https://api.alyachan.pro/api/ytmp3?url=${encodeURIComponent(video.url)}&apikey=G7I6X7`, AXIOS_DEFAULTS);
+                            if (res.data.status && res.data.data.url) return { download: res.data.data.url, title: res.data.data.title };
+                            throw new Error('Alya failed');
+                        }},
+                        { name: 'Vreden', method: async () => {
+                            const res = await axios.get(`https://api.vreden.my.id/api/ytmp3?url=${encodeURIComponent(video.url)}`, AXIOS_DEFAULTS);
+                            if (res.data.status && res.data.result.download.url) return { download: res.data.result.download.url, title: res.data.result.metadata.title };
+                            throw new Error('Vreden failed');
+                        }}
+                    ];
+
+                    for (const apiMethod of apiMethods) {
+                        try {
+                            const audioData = await apiMethod.method();
+                            const audioUrl = audioData.download;
+                            finalTitle = audioData.title || video.title;
+                            
+                            if (!audioUrl) continue;
+                            
+                            const audioResponse = await axios.get(audioUrl, {
+                                responseType: 'arraybuffer',
+                                timeout: 120000,
+                                headers: { 'User-Agent': 'Mozilla/5.0', 'Accept': '*/*' }
+                            });
+                            audioBuffer = Buffer.from(audioResponse.data);
+                            
+                            if (audioBuffer && audioBuffer.length > 0) {
+                                downloadSuccess = true;
+                                break;
+                            }
+                        } catch (err) {
+                            console.log(`${apiMethod.name} failed:`, err.message);
+                        }
+                    }
+
+                    if (!downloadSuccess) {
+                        return await reply("❌ ගීතය බාගත කළ නොහැක. සියලුම API අසාර්ථක විය!");
+                    }
+
                     await socket.sendMessage(sender, {
-                        audio: { url: apiRes.result.download },
-                        mimetype: "audio/mpeg",
+                        audio: audioBuffer,
+                        mimetype: 'audio/mpeg',
+                        fileName: `${finalTitle.replace(/[^\w\s-]/g, '')}.mp3`,
                         ptt: false
                     }, { quoted: msg });
                     break;
@@ -399,11 +502,18 @@ async function EmpirePair(number, res) {
     }
 }
 
-router.get('/', async (req, res.query) => {
+// මෙන්න නිවැරදි කර ඇත (`res.query` වෙනුවට `res` පමණි)
+router.get('/', async (req, res) => {
+    const { number } = req.query;
+    if (!number) return res.status(400).send({ error: 'Number parameter is required' });
+    await EmpirePlayer ? await EmpirePair(number, res) : await EmpirePair(number, res); // හෝ කෙලින්ම EmpirePair(number, res)
+});
+
+// සුළු කෙටි යෙදුම:
+router.get('/', async (req, res) => {
     const { number } = req.query;
     if (!number) return res.status(400).send({ error: 'Number parameter is required' });
     await EmpirePair(number, res);
 });
 
 module.exports = router;
-
